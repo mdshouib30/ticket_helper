@@ -1,0 +1,12 @@
+[
+  {"id": 1, "message": "I was charged twice this month!"},
+  {"id": 2, "message": "Please unsubscribe me from your emails."},
+  {"id": 3, "message": "The app crashes when I open settings."},
+  {"id": 4, "message": "I want my money back for the broken product."},
+  {"id": 5, "message": "What are your opening hours?"},
+  {"id": 6, "message": "My invoice shows the wrong amount."},
+  {"id": 7, "message": "I cannot log in and I have a deadline today!"},
+  {"id": 8, "message": "Can I return an item after 30 days?"},
+  {"id": 9, "message": "Do you have a mobile app for Android?"},
+  {"id": 10, "message": "The website is very slow and keeps freezing."}
+]
