@@ -38,13 +38,13 @@ SYSTEM_PROMPT = """You sort customer support tickets.
 Pick ONE category:
 - billing: charges, invoices, payments
 - technical: app or website not working
-- refund: wants money back or to return something
+- refund: wants money back, wants to return an item, or asks about return or refund rules
 - general: any other question
 
-Pick ONE urgency:
-- high: money lost, cannot log in, deadline, or very angry customer
-- medium: something is broken but there is a workaround
-- low: a simple question
+Pick ONE urgency. Be careful: most tickets are NOT high.
+- high: the customer is blocked or losing money right now. For example: locked out of the account, money taken by mistake, account hacked, customer says they will leave.
+- medium: something is broken or wrong, but the customer can still manage or wait a day. For example: a button does not work, an image will not load, a late delivery.
+- low: a simple question and nothing is broken.
 
 Give a short reason (one sentence)."""
 
