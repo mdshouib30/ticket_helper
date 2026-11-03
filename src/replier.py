@@ -1,6 +1,5 @@
 from src.classifier import MODEL, Category, TicketResult, client
 
-
 STYLES = {
     Category.billing: "Be calm and careful. Say we will check the charge. Never promise a refund.",
     Category.technical: "Be helpful and clear. Give one or two simple steps to try.",

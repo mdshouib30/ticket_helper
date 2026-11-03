@@ -39,7 +39,7 @@ for ticket in tickets:
     if action == "SEND TO HUMAN":
         human_count += 1
 
-    logging.info(
+    logging.info(  # noqa: LOG015
         "ticket=%s sorted_by=%s category=%s urgency=%s action=%s why=%s",
         ticket["id"],
         sorted_by,
