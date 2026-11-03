@@ -41,10 +41,10 @@ Pick ONE category:
 - refund: wants money back or to return something
 - general: any other question
 
-Pick ONE urgency:
-- high: money lost, cannot log in, deadline, or very angry customer
-- medium: something is broken but there is a workaround
-- low: a simple question
+Pick ONE urgency. Be careful: most tickets are NOT high.
+- high: the customer is blocked or losing money right now. For example: locked out of the account, money taken by mistake, account hacked, customer says they will leave.
+- medium: something is broken or wrong, but the customer can still manage or wait a day. For example: a button does not work, an image will not load, a late delivery.
+- low: a simple question and nothing is broken.
 
 Give a short reason (one sentence)."""
 
