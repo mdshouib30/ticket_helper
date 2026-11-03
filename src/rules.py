@@ -19,6 +19,12 @@ RULES = [
         Urgency.medium,
         "Customer needs a password reset.",
     ),
+    (
+        ["return an item", "return policy", "send it back", "return my order"],
+        Category.refund,
+        Urgency.low,
+        "Customer asks about returning an item.",
+    ),
 ]
 
 
