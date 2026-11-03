@@ -38,7 +38,7 @@ SYSTEM_PROMPT = """You sort customer support tickets.
 Pick ONE category:
 - billing: charges, invoices, payments
 - technical: app or website not working
-- refund: wants money back or to return something
+- refund: wants money back, wants to return an item, or asks about return or refund rules
 - general: any other question
 
 Pick ONE urgency. Be careful: most tickets are NOT high.

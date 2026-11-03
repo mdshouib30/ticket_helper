@@ -7,8 +7,8 @@ def decide_action(result: TicketResult, reply: str):
     """Return (action, why). Action is AUTO-REPLY or SEND TO HUMAN."""
     if result.urgency == Urgency.high:
         return "SEND TO HUMAN", "High urgency."
-    if result.category == Category.refund:
-        return "SEND TO HUMAN", "Refund requests need a person."
+    if result.category in (Category.billing, Category.refund):
+        return "SEND TO HUMAN", "Money questions need a person."
     if any(ch.isdigit() for ch in reply):
         return (
             "SEND TO HUMAN",
