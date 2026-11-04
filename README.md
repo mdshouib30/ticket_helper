@@ -2,7 +2,7 @@
 
 An AI system that sorts customer support tickets, drafts replies, and sends risky tickets to a human. It runs fully on a laptop with a free local model, so it costs nothing to run.
 
-![Dashboard](docs/dashboard.png)
+http://localhost:8501/#ai-support-ticket-helper
 
 ## Why I built it
 
