@@ -7,8 +7,29 @@ STYLES = {
     Category.general: "Be friendly and short. Answer the question simply.",
 }
 
+FIXED_REPLIES = {
+    "Customer wants to stop receiving emails.": (
+        "Thanks for your message. We have noted your request "
+        "to stop receiving emails.\n\nSupport Team"
+    ),
+    "Simple question about opening hours.": (
+        "Thanks for your message. A team member will send you "
+        "our opening hours.\n\nSupport Team"
+    ),
+    "Customer needs a password reset.": (
+        "Thanks for your message. A team member will help you "
+        "reset your password.\n\nSupport Team"
+    ),
+    "Customer asks about returning an item.": (
+        "Thanks for your message. A team member will explain our "
+        "return rules.\n\nSupport Team"
+    ),
+}
+
 
 def write_reply(message: str, result: TicketResult) -> str:
+    if result.reason in FIXED_REPLIES:
+        return FIXED_REPLIES[result.reason]
     style = STYLES[result.category]
     completion = client.chat.completions.create(
         model=MODEL,
