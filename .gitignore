@@ -3,3 +3,4 @@
 __pycache__/
 tickets.log
 output/
+.pytest_cache/
