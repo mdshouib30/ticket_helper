@@ -1,0 +1,12 @@
+[
+  {"id": 1, "question": "What are your opening hours?", "answer": "Our support team is available Monday to Friday, 9am to 5pm."},
+  {"id": 2, "question": "What is your return policy?", "answer": "You can return unused items within 30 days of delivery. After 30 days, please contact support."},
+  {"id": 3, "question": "Do you offer student discounts?", "answer": "Yes. Students get 10% off with a valid student email address."},
+  {"id": 4, "question": "Do you ship to other countries?", "answer": "We ship to the US, UK, Canada, and India. Delivery takes 5 to 7 business days."},
+  {"id": 5, "question": "How do I change my email address?", "answer": "Go to Settings, then Account, then Email, enter the new address, and click Save."},
+  {"id": 6, "question": "How do I update my credit card details?", "answer": "Go to Settings, then Billing, then Payment method, and enter the new card."},
+  {"id": 7, "question": "Where can I find my past invoices?", "answer": "Go to Settings, then Billing, then Invoices to download past invoices."},
+  {"id": 8, "question": "Is the app available in other languages?", "answer": "The app is available in English, Spanish, and French."},
+  {"id": 9, "question": "Do you have an Android app?", "answer": "Yes. The Android app is available on Google Play."},
+  {"id": 10, "question": "What does each plan cost?", "answer": "The Basic plan costs $10 a month and the Pro plan costs $30 a month."}
+]

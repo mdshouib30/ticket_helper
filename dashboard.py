@@ -1,6 +1,7 @@
 import json
 import os
 
+import pandas as pd
 import streamlit as st
 
 from src.classifier import classify_ticket
@@ -8,8 +9,24 @@ from src.replier import write_reply
 from src.rules import apply_rules
 from src.safety import decide_action
 
-st.set_page_config(page_title="Support Ticket Helper", layout="wide")
-st.title("AI Support Ticket Helper")
+st.set_page_config(page_title="Support Ticket Helper", page_icon="🎫", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stMetric"] {
+        background-color: rgba(120, 120, 200, 0.08);
+        border: 1px solid rgba(120, 120, 200, 0.25);
+        border-radius: 12px;
+        padding: 16px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+URGENCY_ICON = {"high": "🔴 high", "medium": "🟡 medium", "low": "🟢 low"}
+ACTION_ICON = {"SEND TO HUMAN": "🧑 Human check", "AUTO-REPLY": "✅ Auto-reply"}
 
 if not os.path.exists("output/results.json"):
     st.warning("No results yet. Run this first: uv run main.py")
@@ -17,6 +34,32 @@ if not os.path.exists("output/results.json"):
 
 with open("output/results.json") as f:
     results = json.load(f)
+
+# ---------- Sidebar ----------
+st.sidebar.title("🎫 Ticket Helper")
+st.sidebar.caption("Rules first, AI second, a human for risky tickets.")
+urgency_filter = st.sidebar.multiselect(
+    "Show urgency",
+    ["high", "medium", "low"],
+    default=["high", "medium", "low"],
+)
+action_filter = st.sidebar.multiselect(
+    "Show action",
+    ["SEND TO HUMAN", "AUTO-REPLY"],
+    default=["SEND TO HUMAN", "AUTO-REPLY"],
+)
+st.sidebar.divider()
+st.sidebar.markdown(
+    "**How it works**\n\n"
+    "1. Simple rules\n"
+    "2. AI sorts the ticket\n"
+    "3. AI writes a reply\n"
+    "4. Safety check"
+)
+
+# ---------- Header and number cards ----------
+st.title("🎫 AI Support Ticket Helper")
+st.caption("Sorts customer tickets, drafts replies, and sends risky ones to a human.")
 
 total = len(results)
 by_rules = sum(1 for r in results if r["sorted_by"] == "RULES")
@@ -29,63 +72,100 @@ c2.metric("Sorted without AI", by_rules)
 c3.metric("Sent to a human", to_human)
 c4.metric("High urgency", high)
 
-st.subheader("All tickets")
-table = [
-    {
-        "ID": r["id"],
-        "Message": r["message"],
-        "Category": r["category"],
-        "Urgency": r["urgency"],
-        "Action": r["action"],
-    }
+shown = [
+    r
     for r in results
+    if r["urgency"] in urgency_filter and r["action"] in action_filter
 ]
-st.dataframe(table, hide_index=True)
 
-st.subheader("Ticket details")
-chosen = st.selectbox("Pick a ticket", [r["id"] for r in results])
-ticket = next(r for r in results if r["id"] == chosen)
+tab1, tab2, tab3 = st.tabs(["📋 Tickets", "📊 Charts", "⚡ Try a new ticket"])
 
-st.write(f"**Message:** {ticket['message']}")
-st.write(f"**Sorted by:** {ticket['sorted_by']}")
-st.write(f"**Why this category:** {ticket['reason']}")
-st.write(f"**Reply draft:** {ticket['reply']}")
-
-if ticket["action"] == "SEND TO HUMAN":
-    st.warning(f"Send to a human: {ticket['why']}")
-else:
-    st.success(f"Auto-reply: {ticket['why']}")
-
-st.subheader("Try a new ticket")
-new_message = st.text_area(
-    "Type a customer message",
-    placeholder="I was charged twice this month!",
-)
-
-if st.button("Process ticket"):
-    if not new_message.strip():
-        st.warning("Please type a message first.")
+# ---------- Tab 1: tickets ----------
+with tab1:
+    if not shown:
+        st.info("No tickets match the filters in the sidebar.")
     else:
-        try:
-            with st.spinner("The AI is working. This can take up to a minute."):
-                result = apply_rules(new_message)
-                sorted_by = "RULES" if result is not None else "AI"
-                if result is None:
-                    result = classify_ticket(new_message)
-                reply = write_reply(new_message, result)
-                action, why = decide_action(result, reply)
+        table = [
+            {
+                "ID": r["id"],
+                "Message": r["message"],
+                "Category": r["category"],
+                "Urgency": URGENCY_ICON[r["urgency"]],
+                "Action": ACTION_ICON[r["action"]],
+            }
+            for r in shown
+        ]
+        st.dataframe(table, hide_index=True)
 
-            st.write(f"**Sorted by:** {sorted_by}")
-            st.write(f"**Category:** {result.category.value}")
-            st.write(f"**Urgency:** {result.urgency.value}")
-            st.write(f"**Why:** {result.reason}")
-            st.write(f"**Reply draft:** {reply}")
+        st.subheader("Ticket details")
+        chosen = st.selectbox("Pick a ticket", [r["id"] for r in shown])
+        ticket = next(r for r in shown if r["id"] == chosen)
 
-            if action == "SEND TO HUMAN":
-                st.warning(f"Send to a human: {why}")
+        left, right = st.columns(2)
+        with left:
+            with st.container(border=True):
+                st.markdown("**Customer message**")
+                st.write(ticket["message"])
+                st.markdown("**Sorted by**")
+                st.write(ticket["sorted_by"])
+                st.markdown("**Why this category**")
+                st.write(ticket["reason"])
+        with right:
+            with st.container(border=True):
+                st.markdown("**Reply draft**")
+                st.write(ticket["reply"])
+            if ticket["action"] == "SEND TO HUMAN":
+                st.warning(f"Send to a human: {ticket['why']}")
             else:
-                st.success(f"Auto-reply: {why}")
-        except Exception:
-            st.error(
-                "Could not reach the AI. Is Ollama running? Start it with: ollama serve"
-            )
+                st.success(f"Auto-reply: {ticket['why']}")
+
+# ---------- Tab 2: charts ----------
+with tab2:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Tickets by category")
+        st.bar_chart(pd.Series([r["category"] for r in results]).value_counts())
+    with col_b:
+        st.subheader("Tickets by urgency")
+        st.bar_chart(pd.Series([r["urgency"] for r in results]).value_counts())
+
+# ---------- Tab 3: live box ----------
+with tab3:
+    st.write("Type a customer message and watch the whole system handle it.")
+    new_message = st.text_area(
+        "Customer message",
+        placeholder="I was charged twice this month!",
+    )
+
+    if st.button("Process ticket", type="primary"):
+        if not new_message.strip():
+            st.warning("Please type a message first.")
+        else:
+            try:
+                with st.spinner("The AI is working. This can take up to a minute."):
+                    result = apply_rules(new_message)
+                    sorted_by = "RULES" if result is not None else "AI"
+                    if result is None:
+                        result = classify_ticket(new_message)
+                    reply = write_reply(new_message, result)
+                    action, why = decide_action(result, reply)
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Category", result.category.value)
+                m2.metric("Urgency", URGENCY_ICON[result.urgency.value])
+                m3.metric("Sorted by", sorted_by)
+                st.write(f"**Why:** {result.reason}")
+
+                with st.container(border=True):
+                    st.markdown("**Reply draft**")
+                    st.write(reply)
+
+                if action == "SEND TO HUMAN":
+                    st.warning(f"Send to a human: {why}")
+                else:
+                    st.success(f"Auto-reply: {why}")
+            except Exception as exc:
+                st.error(
+                    "Could not finish. Is Ollama running? Start it with: ollama serve"
+                )
+                st.caption(f"Details: {exc}")
