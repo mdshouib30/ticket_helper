@@ -87,4 +87,14 @@ def write_reply(message: str, result: TicketResult) -> str:
             {"role": "user", "content": message},
         ],
     )
-    return completion.choices[0].message.content.strip()
+
+    reply = completion.choices[0].message.content.strip()
+
+    # Guard: if the AI wrote much more than the fact, it added extra stuff.
+    if len(reply.split()) > len(fact.split()) + 15:
+        reply = f"Thanks for your message. {fact}"
+
+    if not reply.endswith("Support Team"):
+        reply += "\n\nSupport Team"
+
+    return reply
