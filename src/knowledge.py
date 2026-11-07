@@ -6,10 +6,21 @@ from src.classifier import client
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 
-with open("data/faq.json") as f:
-    FAQ = json.load(f)
 
+def _load_faq() -> list:
+    with open("data/faq.json") as f:
+        return json.load(f)
+
+
+FAQ = _load_faq()
 _faq_vectors = None
+
+
+def reload_faq():
+    """Read data/faq.json again after it has changed."""
+    global FAQ, _faq_vectors
+    FAQ = _load_faq()
+    _faq_vectors = None
 
 
 def _embed(text: str) -> list:
