@@ -1,3 +1,5 @@
+import re
+
 from src.classifier import MODEL, Category, TicketResult, client
 from src.knowledge import best_faq
 
@@ -87,14 +89,14 @@ def write_reply(message: str, result: TicketResult) -> str:
             {"role": "user", "content": message},
         ],
     )
-
     reply = completion.choices[0].message.content.strip()
 
-    # Guard: if the AI wrote much more than the fact, it added extra stuff.
-    if len(reply.split()) > len(fact.split()) + 15:
+    # Guards: the AI may not add much text or any new number.
+    too_long = len(reply.split()) > len(fact.split()) + 8
+    new_numbers = set(re.findall(r"\d+", reply)) - set(re.findall(r"\d+", fact))
+    if too_long or new_numbers:
         reply = f"Thanks for your message. {fact}"
 
     if not reply.endswith("Support Team"):
         reply += "\n\nSupport Team"
-
     return reply
