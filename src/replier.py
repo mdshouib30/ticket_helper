@@ -100,3 +100,13 @@ def write_reply(message: str, result: TicketResult) -> str:
     if not reply.endswith("Support Team"):
         reply += "\n\nSupport Team"
     return reply
+
+
+def reply_source(message: str, result: TicketResult):
+    """Say where a reply came from: a rule, an FAQ page, or a holding reply."""
+    if result.reason in FIXED_REPLIES:
+        return "Fixed rule reply (no AI)", None
+    item, score = best_faq(message)
+    if score >= FAQ_THRESHOLD:
+        return f"FAQ page: {item['question']}", score
+    return "Holding reply (no FAQ match, no AI)", score

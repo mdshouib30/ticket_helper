@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from src import knowledge
-from src.classifier import classify_ticket
-from src.replier import FAQ_THRESHOLD, write_reply
+from src.classifier import Category, TicketResult, Urgency, classify_ticket
+from src.replier import FAQ_THRESHOLD, reply_source, write_reply
 from src.rules import apply_rules
 from src.safety import decide_action
 
@@ -118,6 +118,16 @@ with tab1:
             with st.container(border=True):
                 st.markdown("**Reply draft**")
                 st.write(ticket["reply"])
+                try:
+                    source_result = TicketResult(
+                        category=Category(ticket["category"]),
+                        urgency=Urgency(ticket["urgency"]),
+                        reason=ticket["reason"],
+                    )
+                    source, score = reply_source(ticket["message"], source_result)
+                    st.caption(f"Reply source: {source}")
+                except Exception:
+                    st.caption("Reply source: unavailable (is Ollama running?)")
             if ticket["action"] == "SEND TO HUMAN":
                 st.warning(f"Send to a human: {ticket['why']}")
             else:
