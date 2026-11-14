@@ -2,7 +2,6 @@
 
 An AI system that sorts customer support tickets, drafts replies from a company FAQ, and sends risky tickets to a human. It has a REST API, a database, and a dashboard. It runs fully on a laptop with free local models, so it costs nothing to run.
 
-![Dashboard](http://localhost:8501/)
 
 ## Why I built it
 
