@@ -1,0 +1,21 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LLM_BASE_URL: http://localhost:11434/v1
+      LLM_API_KEY: ollama
+      LLM_MODEL: llama3.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install packages
+        run: uv sync
+      - name: Run tests
+        run: uv run pytest
