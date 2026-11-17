@@ -104,21 +104,33 @@ All 3 mistakes on the fresh tickets were still sent to a human by the safety che
 
 **FAQ replies (10 messages I wrote: 7 with an FAQ answer, 3 without)**
 
+## Results
+
+Measured against hand-labeled data. The tickets and messages are fake. A perfect score on a small test does not prove a model is perfect, so these numbers are only a starting point.
+
+**Sorting (30 tickets, answer key labeled by me)**
+
+| Model and test | Category | Urgency |
+|---|---|---|
+| llama3.2 (local): first version, tickets 1-10 | 9 of 10 | 7 of 10 |
+| llama3.2 (local): after prompt and rule changes, tickets 1-10 | 10 of 10 | 10 of 10 |
+| llama3.2 (local): fresh tickets 11-30 | 19 of 20 | 18 of 20 |
+| Gemini flash-lite (hosted): tickets 1-10 | 10 of 10 | 10 of 10 |
+| Gemini flash-lite (hosted): fresh tickets 11-30 | 20 of 20 | 20 of 20 |
+
+With the local model, all 3 mistakes on the fresh tickets were still sent to a human by the safety check. The hosted model name ends in `-latest`, which Google can move to a newer model, so these scores are from November 2026.
+
+**FAQ replies (10 messages I wrote: 7 with an FAQ answer, 3 without)**
+
 | Test | Result |
 |---|---|
-| Right FAQ page chosen (or correctly none) | 9 of 10 |
-| Replies with no invented facts, before the guards | about 8 of 10 |
-| Replies with no invented facts, after the guards | 10 of 10 |
+| Right FAQ page chosen (or correctly none), local and hosted search | 9 of 10 |
+| Replies with no invented facts, before the guards (llama3.2) | about 8 of 10 |
+| Replies with no invented facts, after the guards (llama3.2) | 10 of 10 |
+| Replies with no invented facts, after the guards (Gemini) | 10 of 10 |
 
-The one wrong FAQ choice was a safe miss: the ticket got the "a team member will follow up" reply. I changed the guards after seeing these same 10 messages, so the last score is not a fresh test.
+The one wrong FAQ choice was a safe miss: the ticket got the "a team member will follow up" reply. The FAQ cut-off depends on the search model. Local embeddings use 0.60. With the hosted embeddings, unrelated messages scored 0.58 to 0.65 and correct matches scored 0.66 to 0.91, so I set the cut-off to 0.70 from only 12 messages. I changed the guards after seeing these same messages, so the reply scores are not a fresh test.
 
-## Tests
-
-The pytest tests cover the rules, the safety check, the database, and the API. The database and API tests use a temporary database and a fake pipeline, so they run in a second and need no model.
-
-```
-uv run pytest
-```
 
 ## Project structure
 
