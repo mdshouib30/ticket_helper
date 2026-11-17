@@ -1,9 +1,13 @@
+import logging
+import os
 import re
 
 from src.classifier import MODEL, Category, TicketResult, client
 from src.knowledge import best_faq
 
-FAQ_THRESHOLD = 0.60  # how close a match must be to count as a match
+# How close an FAQ match must be to count. It depends on the search model,
+# so it is set in .env (0.60 for local Ollama, 0.70 for Gemini).
+FAQ_THRESHOLD = float(os.getenv("FAQ_THRESHOLD", "0.60"))
 
 STYLES = {
     Category.billing: "Be calm and careful.",
@@ -54,7 +58,11 @@ FIXED_REPLIES = {
 
 def find_fact(message: str):
     """Return the FAQ answer if one matches well enough, otherwise None."""
-    item, score = best_faq(message)
+    try:
+        item, score = best_faq(message)
+    except Exception as exc:
+        logging.warning("FAQ search failed, treating as no match: %s", exc)
+        return None
     if score >= FAQ_THRESHOLD:
         return item["answer"]
     return None
@@ -71,25 +79,30 @@ def write_reply(message: str, result: TicketResult) -> str:
         return HOLDING_REPLIES[result.category]
 
     # 3. A fact exists: the AI may only turn it into a friendly reply.
-    completion = client.chat.completions.create(
-        model=MODEL,
-        temperature=0,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You write short customer support replies, "
-                    "maximum 3 sentences. "
-                    f"{STYLES[result.category]} "
-                    f"The ONLY information you may use is this fact: {fact} "
-                    "Do not add any other information, offers, or guesses. "
-                    "End with: Support Team"
-                ),
-            },
-            {"role": "user", "content": message},
-        ],
-    )
-    reply = completion.choices[0].message.content.strip()
+    try:
+        completion = client.chat.completions.create(
+            model=MODEL,
+            temperature=0,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You write short customer support replies, "
+                        "maximum 3 sentences. "
+                        f"{STYLES[result.category]} "
+                        f"The ONLY information you may use is this fact: {fact} "
+                        "Do not add any other information, offers, or guesses. "
+                        "End with: Support Team"
+                    ),
+                },
+                {"role": "user", "content": message},
+            ],
+        )
+        reply = completion.choices[0].message.content.strip()
+    except Exception as exc:
+        # The AI is busy or down: use the plain fact instead.
+        logging.warning("Chat model failed, using the plain fact: %s", exc)
+        return f"Thanks for your message. {fact}\n\nSupport Team"
 
     # Guards: the AI may not add much text or any new number.
     too_long = len(reply.split()) > len(fact.split()) + 8
@@ -106,7 +119,10 @@ def reply_source(message: str, result: TicketResult):
     """Say where a reply came from: a rule, an FAQ page, or a holding reply."""
     if result.reason in FIXED_REPLIES:
         return "Fixed rule reply (no AI)", None
-    item, score = best_faq(message)
+    try:
+        item, score = best_faq(message)
+    except Exception:
+        return "Holding reply (search unavailable)", None
     if score >= FAQ_THRESHOLD:
         return f"FAQ page: {item['question']}", score
     return "Holding reply (no FAQ match, no AI)", score

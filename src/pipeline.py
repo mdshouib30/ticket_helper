@@ -1,4 +1,4 @@
-from src.classifier import classify_ticket
+from src.classifier import Category, TicketResult, Urgency, classify_ticket
 from src.replier import reply_source, write_reply
 from src.rules import apply_rules
 from src.safety import decide_action
@@ -9,7 +9,16 @@ def process_ticket(message: str) -> dict:
     result = apply_rules(message)
     sorted_by = "RULES" if result is not None else "AI"
     if result is None:
-        result = classify_ticket(message)
+        try:
+            result = classify_ticket(message)
+        except Exception:
+            # Fail safe: if the AI is unavailable, a person looks at the ticket.
+            result = TicketResult(
+                category=Category.general,
+                urgency=Urgency.high,
+                reason="The AI was unavailable, so a person should look at this ticket.",
+            )
+            sorted_by = "AI unavailable"
 
     reply = write_reply(message, result)
     source, _ = reply_source(message, result)
