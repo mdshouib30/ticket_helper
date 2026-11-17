@@ -90,22 +90,6 @@ Every reply also records its source (a fixed rule reply, a named FAQ page, or a 
 
 ## Results
 
-Measured against hand-labeled data. The tickets and messages are fake.
-
-**Sorting (30 tickets, answer key labeled by me)**
-
-| Test | Category | Urgency |
-|---|---|---|
-| First version (tickets 1-10) | 9 of 10 | 7 of 10 |
-| After prompt and rule changes (tickets 1-10) | 10 of 10 | 10 of 10 |
-| Fresh tickets never used for tuning (tickets 11-30) | 19 of 20 | 18 of 20 |
-
-All 3 mistakes on the fresh tickets were still sent to a human by the safety check.
-
-**FAQ replies (10 messages I wrote: 7 with an FAQ answer, 3 without)**
-
-## Results
-
 Measured against hand-labeled data. The tickets and messages are fake. A perfect score on a small test does not prove a model is perfect, so these numbers are only a starting point.
 
 **Sorting (30 tickets, answer key labeled by me)**
