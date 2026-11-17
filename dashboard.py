@@ -1,6 +1,8 @@
 import json
 import os
+import threading
 import urllib.request
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -9,8 +11,15 @@ from src import database, knowledge
 from src.pipeline import process_ticket
 from src.replier import FAQ_THRESHOLD
 
+# ---------- Settings ----------
+DEMO_MODE = os.getenv("DEMO_MODE", "false").strip().lower() == "true"
+SESSION_LIMIT = int(os.getenv("SESSION_LIMIT", "5"))  # checks per visit
+DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "100"))  # checks per day, all visitors
+MAX_CHARS = 500
+
 st.set_page_config(page_title="Support Ticket Helper", page_icon="🎫", layout="wide")
-database.init_db()
+if not DEMO_MODE:
+    database.init_db()
 
 st.markdown(
     """
@@ -37,7 +46,11 @@ ACTION_LABEL = {
     "SEND TO HUMAN": "🧑 Needs a person",
     "AUTO-REPLY": "✅ Safe to send",
 }
-HANDLED_LABEL = {"RULES": "A simple rule (no AI)", "AI": "The AI"}
+HANDLED_LABEL = {
+    "RULES": "A simple rule (no AI)",
+    "AI": "The AI",
+    "AI unavailable": "Nobody (the AI was busy)",
+}
 
 EXAMPLES = [
     "Do you deliver abroad?",
@@ -47,12 +60,52 @@ EXAMPLES = [
 ]
 
 
-def ai_is_running() -> bool:
-    try:
-        urllib.request.urlopen("http://localhost:11434", timeout=2)
-        return True
-    except Exception:
-        return False
+# ---------- Helpers ----------
+def ai_status():
+    """Return (is_ok, text) for the status light in the sidebar."""
+    base = os.getenv("LLM_BASE_URL", "")
+    if "localhost" in base or "127.0.0.1" in base:
+        try:
+            urllib.request.urlopen(base.split("/v1")[0], timeout=2)
+            return True, "The local AI (Ollama) is running"
+        except Exception:
+            return False, "The local AI is not running. Run: ollama serve"
+    if os.getenv("LLM_API_KEY"):
+        return True, "The online AI is configured"
+    return False, "No AI key found. Check the settings"
+
+
+@st.cache_resource
+def _usage():
+    return {"lock": threading.Lock(), "day": "", "count": 0}
+
+
+def try_use_quota():
+    """Count one use. Return a message if a limit is reached, otherwise None."""
+    if not DEMO_MODE:
+        return None
+    if st.session_state.get("uses", 0) >= SESSION_LIMIT:
+        return (
+            f"You have used all {SESSION_LIMIT} free checks for this visit. "
+            "Thank you for trying the demo!"
+        )
+    usage = _usage()
+    with usage["lock"]:
+        today = date.today().isoformat()
+        if usage["day"] != today:
+            usage["day"] = today
+            usage["count"] = 0
+        if usage["count"] >= DAILY_LIMIT:
+            return "The demo reached its daily limit. Please come back tomorrow."
+        usage["count"] += 1
+    st.session_state["uses"] = st.session_state.get("uses", 0) + 1
+    return None
+
+
+def get_tickets():
+    if DEMO_MODE:
+        return list(reversed(st.session_state.get("my_tickets", [])))
+    return database.list_tickets(limit=500)
 
 
 def use_example(text: str):
@@ -93,11 +146,12 @@ def show_result(data: dict):
 # ---------- Sidebar ----------
 st.sidebar.title("🎫 Ticket Helper")
 st.sidebar.caption("Sorts customer messages and suggests replies.")
-if ai_is_running():
-    st.sidebar.success("🟢 The AI is running")
+status_ok, status_text = ai_status()
+if status_ok:
+    st.sidebar.success(f"🟢 {status_text}")
 else:
-    st.sidebar.error("🔴 The AI is not running")
-    st.sidebar.caption("Open a terminal and run: ollama serve")
+    st.sidebar.error(f"🔴 {status_text}")
+checks_box = st.sidebar.empty()
 st.sidebar.divider()
 st.sidebar.markdown("**Colors**\n\n🔴 urgent  \n🟡 medium  \n🟢 not urgent")
 
@@ -107,8 +161,20 @@ st.caption(
     "Paste a customer message and get a category, an urgency, and a suggested reply."
 )
 
+if DEMO_MODE:
+    st.info(
+        "**Public demo.** The company facts and tickets are made up. "
+        "Please do not type personal information. Nothing you type is saved "
+        f"after you leave. You get {SESSION_LIMIT} free checks per visit."
+    )
+
 tab_check, tab_all, tab_faq, tab_help = st.tabs(
-    ["✨ Check a ticket", "📋 All tickets", "📚 Help center (FAQ)", "ℹ️ How it works"]
+    [
+        "✨ Check a ticket",
+        "📋 My tickets" if DEMO_MODE else "📋 All tickets",
+        "📚 Help center (FAQ)",
+        "ℹ️ How it works",
+    ]
 )
 
 # ---------- Tab 1: check a ticket ----------
@@ -124,6 +190,7 @@ with tab_check:
         "Customer message",
         key="ticket_text",
         height=110,
+        max_chars=MAX_CHARS,
         placeholder="Type or paste a customer message here...",
     )
 
@@ -131,31 +198,47 @@ with tab_check:
         if not message.strip():
             st.warning("Please type a message first.")
         else:
-            try:
-                with st.spinner("Working on it. This can take up to a minute..."):
-                    data = process_ticket(message.strip())
-                    data["id"] = database.save_ticket(data)
-                st.session_state["last_result"] = data
-            except Exception as exc:
-                st.session_state.pop("last_result", None)
-                st.error(
-                    "Something went wrong. Is the AI running? "
-                    "Open a terminal and run: ollama serve"
-                )
-                st.caption(f"Technical details: {exc}")
+            limit_message = try_use_quota()
+            if limit_message:
+                st.warning(limit_message)
+            else:
+                try:
+                    with st.spinner("Working on it. This can take up to a minute..."):
+                        data = process_ticket(message.strip())
+                        if DEMO_MODE:
+                            mine = st.session_state.setdefault("my_tickets", [])
+                            data["id"] = len(mine) + 1
+                            data["created_at"] = datetime.now().isoformat(
+                                timespec="seconds"
+                            )
+                            mine.append(data)
+                        else:
+                            data["id"] = database.save_ticket(data)
+                    st.session_state["last_result"] = data
+                except Exception as exc:
+                    st.session_state.pop("last_result", None)
+                    st.error(
+                        "Something went wrong. The AI may be busy. "
+                        "Please try again in a minute."
+                    )
+                    st.caption(f"Technical details: {exc}")
 
     if "last_result" in st.session_state:
         st.divider()
-        show_result(st.session_state["last_result"])
-        st.caption(f"Saved as ticket #{st.session_state['last_result']['id']}")
+        last = st.session_state["last_result"]
+        show_result(last)
+        if DEMO_MODE:
+            st.caption("This result is shown only to you and is not saved.")
+        else:
+            st.caption(f"Saved as ticket #{last['id']}")
 
-# ---------- Tab 2: all tickets ----------
+# ---------- Tab 2: tickets ----------
 with tab_all:
-    tickets = database.list_tickets(limit=500)
+    tickets = get_tickets()
 
     if not tickets:
         st.info("No tickets yet. Check one in the first tab.")
-        if os.path.exists("output/results.json"):
+        if not DEMO_MODE and os.path.exists("output/results.json"):
             if st.button("Load the sample tickets"):
                 load_samples()
                 st.rerun()
@@ -163,7 +246,7 @@ with tab_all:
         df = pd.DataFrame(tickets)
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("All tickets", len(df))
+        m1.metric("Tickets", len(df))
         m2.metric("Need a person", int((df["action"] == "SEND TO HUMAN").sum()))
         m3.metric("Handled without AI", int((df["sorted_by"] == "RULES").sum()))
         m4.metric("Urgent", int((df["urgency"] == "high").sum()))
@@ -236,11 +319,29 @@ with tab_faq:
 
     st.subheader("Test the search")
     st.caption("Type a customer message and see which FAQ page the search picks.")
-    test_message = st.text_input("Customer message", key="faq_test")
+    test_message = st.text_input(
+        "Customer message", key="faq_test", max_chars=MAX_CHARS
+    )
+    if test_message.strip() and st.session_state.get("last_faq_test") != test_message:
+        st.session_state["last_faq_test"] = test_message
+        st.session_state["faq_limit_message"] = try_use_quota()
+        st.session_state["faq_test_result"] = None
+        if not st.session_state["faq_limit_message"]:
+            try:
+                with st.spinner("Searching..."):
+                    st.session_state["faq_test_result"] = knowledge.best_faq(
+                        test_message
+                    )
+            except Exception as exc:
+                st.session_state["faq_limit_message"] = (
+                    f"Could not search right now. Please try again in a minute. ({exc})"
+                )
+
     if test_message.strip():
-        try:
-            with st.spinner("Searching..."):
-                match, score = knowledge.best_faq(test_message)
+        if st.session_state.get("faq_limit_message"):
+            st.warning(st.session_state["faq_limit_message"])
+        elif st.session_state.get("faq_test_result"):
+            match, score = st.session_state["faq_test_result"]
             st.progress(max(0.0, min(1.0, score)))
             st.write(f"**Best match:** {match['question']}")
             st.write(f"**Score:** {score:.2f} (needs {FAQ_THRESHOLD:.2f} or more)")
@@ -253,33 +354,33 @@ with tab_faq:
                     "No good match. The customer gets the standard "
                     "'a team member will follow up' reply."
                 )
-        except Exception as exc:
-            st.error("Could not search. Is the AI running? Run: ollama serve")
-            st.caption(f"Technical details: {exc}")
 
-    st.subheader("Add a new FAQ")
-    with st.form("add_faq", clear_on_submit=True):
-        new_question = st.text_input("Question")
-        new_answer = st.text_area("Answer")
-        submitted = st.form_submit_button("Add to the help center")
+    if DEMO_MODE:
+        st.caption("Editing the help center is turned off in the public demo.")
+    else:
+        st.subheader("Add a new FAQ")
+        with st.form("add_faq", clear_on_submit=True):
+            new_question = st.text_input("Question")
+            new_answer = st.text_area("Answer")
+            submitted = st.form_submit_button("Add to the help center")
 
-    if submitted:
-        if not new_question.strip() or not new_answer.strip():
-            st.warning("Please fill in both the question and the answer.")
-        else:
-            new_id = max([item["id"] for item in knowledge.FAQ], default=0) + 1
-            updated = knowledge.FAQ + [
-                {
-                    "id": new_id,
-                    "question": new_question.strip(),
-                    "answer": new_answer.strip(),
-                }
-            ]
-            with open("data/faq.json", "w") as f:
-                json.dump(updated, f, indent=2)
-            knowledge.reload_faq()
-            st.session_state["faq_added"] = True
-            st.rerun()
+        if submitted:
+            if not new_question.strip() or not new_answer.strip():
+                st.warning("Please fill in both the question and the answer.")
+            else:
+                new_id = max([item["id"] for item in knowledge.FAQ], default=0) + 1
+                updated = knowledge.FAQ + [
+                    {
+                        "id": new_id,
+                        "question": new_question.strip(),
+                        "answer": new_answer.strip(),
+                    }
+                ]
+                with open("data/faq.json", "w") as f:
+                    json.dump(updated, f, indent=2)
+                knowledge.reload_faq()
+                st.session_state["faq_added"] = True
+                st.rerun()
 
 # ---------- Tab 4: how it works ----------
 with tab_help:
@@ -301,6 +402,7 @@ with tab_help:
         - The ticket is about **money** (billing or a refund).
         - The reply contains a **number or time** that must be checked.
         - The reply contains a word like **"guarantee"** or **"promise"**.
+        - The AI was **busy**, so nobody could sort the ticket.
         """
     )
 
@@ -308,7 +410,13 @@ with tab_help:
     st.markdown(
         """
         - The tickets and the help center facts are **made up** for this demo.
-        - The AI runs on this computer, so it costs nothing, but it can be slow.
-        - Tickets are saved in a database, so they are still here tomorrow.
+        - If the AI is busy, the system fails safe: a person is asked to look.
         """
     )
+    if DEMO_MODE:
+        st.markdown("- In the public demo, nothing you type is stored after you leave.")
+
+# ---------- Sidebar footer (updated after any check) ----------
+if DEMO_MODE:
+    left = max(0, SESSION_LIMIT - st.session_state.get("uses", 0))
+    checks_box.caption(f"Free checks left in this visit: {left}")
