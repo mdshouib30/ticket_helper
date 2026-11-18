@@ -1,1 +1,203 @@
+# AI Support Ticket Helper
 
+[![Tests](https://github.com/mdshouib30/ticket_helper/actions/workflows/tests.yml/badge.svg)](https://github.com/mdshouib30/ticket_helper/actions/workflows/tests.yml)
+
+An AI system that sorts customer support tickets, drafts replies from a company FAQ, and sends risky tickets to a human. It has a REST API, a database, and a dashboard. Built with Python, FastAPI, SQLite, and Streamlit.
+
+## Live demo
+
+**Try it here: https://ticketapper-csmdiiwfhxvcq6shx9r9qy.streamlit.app/**
+
+The demo runs in a public mode: each visitor gets 5 free checks, nothing you type is saved, and the FAQ cannot be edited. It uses a hosted model and a made-up FAQ. The free host sleeps after 12 hours without visitors, so the first visit may show a "wake up" button and take about a minute to start.
+
+![Dashboard](docs/dashboard.png)
+
+## How to use the demo
+
+1. Open the link. If the app is asleep, click the wake-up button and wait about a minute.
+2. Click an example message, or type your own. Please do not type personal information.
+3. Click **Check this ticket** and wait up to a minute.
+4. Read the result. A **green** box means the reply is safe to send. A **yellow** box means a team member should check the ticket first.
+
+Messages to try:
+
+| Message | What you should see |
+|---|---|
+| `Do you deliver abroad?` | A reply built from the shipping FAQ. It contains numbers, so the box is yellow |
+| `I was charged twice this month!` | Billing and urgent, with a yellow box |
+| `Please unsubscribe me from your emails.` | Handled by a simple rule with no AI |
+| `Do you sell gift cards?` | No FAQ page matches, so the reply says a team member will follow up. Nothing is invented |
+
+## What it does
+
+1. **Rules first.** Easy tickets (unsubscribe, opening hours, password reset, returns) are handled by plain code with a fixed reply. No AI is used.
+2. **AI sorts the rest.** A language model picks a category and an urgency, in a fixed shape (Pydantic).
+3. **FAQ search.** The message is matched against a small company FAQ using embeddings.
+4. **Grounded reply.** If an FAQ page matches, the model may only rewrite that fact. If nothing matches, the customer gets a fixed "a team member will follow up" reply.
+5. **Reply guards.** If the model adds a new number or much more text than the fact, its reply is replaced by the plain fact.
+6. **Safety check.** Risky tickets go to a human instead of being sent automatically.
+7. **Fails safe.** If the model service is busy or down, a person looks at the ticket. Nothing crashes and nothing is guessed.
+8. **Saved.** The REST API stores every ticket in SQLite, and a Streamlit dashboard shows them.
+
+## Workflow
+
+```mermaid
+flowchart TD
+    A[Customer ticket from the API or the dashboard] --> B{Matches a simple rule?}
+    B -- Yes --> C[Sort with the rule and use a fixed reply]
+    B -- No --> D[AI sorts the ticket: category and urgency]
+    D --> E{FAQ page found?}
+    E -- Yes --> F[AI rewrites the FAQ fact, guards check the reply]
+    E -- No --> G[Fixed holding reply, no AI]
+    C --> H{Safety check}
+    F --> H
+    G --> H
+    H -- Risky or unsure --> I[Human review]
+    H -- Safe --> J[Auto-reply]
+    I --> K[Saved in the SQLite database]
+    J --> K
+    K --> L[Dashboard and API read the results]
+```
+
+## Safety check
+
+A ticket goes to a human if any of these is true. This check is plain code, not AI, so it behaves the same every time.
+
+| Check | Why |
+|---|---|
+| Urgency is high | The customer is blocked or losing money right now. |
+| Category is billing or refund | Money decisions need a person. |
+| The reply contains a number or time | The model can invent facts, such as made-up opening hours. |
+| The reply contains a risky word (for example "guarantee" or "promise") | The model should never promise things on behalf of the company. |
+| The AI was unavailable | Nobody could sort the ticket. |
+
+An early test showed the model inventing details even when told not to (a made-up unsubscribe link, made-up opening hours, "yes, we sell gift cards"). Instructions alone were not enough, so these controls live in code.
+
+## REST API
+
+Start it with `uv run uvicorn api:app --reload`. FastAPI builds a test page at `http://127.0.0.1:8000/docs`.
+
+| Endpoint | What it does |
+|---|---|
+| `POST /tickets` | Send a customer message, run the whole pipeline, save and return the result |
+| `GET /tickets` | List the newest saved tickets |
+| `GET /tickets/{id}` | Get one saved ticket |
+| `GET /stats` | Count total tickets, tickets sent to a human, and tickets sorted by rules |
+| `GET /health` | Check that the service is running |
+
+## Tech stack
+
+| Part | Tool |
+|---|---|
+| Language | Python 3.12 |
+| Chat model | llama3.2 (local, with Ollama) or a hosted model such as Gemini |
+| FAQ search | nomic-embed-text (local) or gemini-embedding-001 (hosted) |
+| Model access | OpenAI-compatible Python SDK, set in `.env` |
+| Structured output | Pydantic |
+| API | FastAPI and Uvicorn |
+| Database | SQLite |
+| Dashboard | Streamlit |
+| Tests and CI | pytest and GitHub Actions |
+| Packages | uv |
+
+## Results
+
+Measured against hand-labeled data. The tickets and messages are fake. A perfect score on a small test does not prove a model is perfect, so these numbers are only a starting point.
+
+**Sorting (30 tickets, answer key labeled by me)**
+
+| Model and test | Category | Urgency |
+|---|---|---|
+| llama3.2 (local): first version, tickets 1-10 | 9 of 10 | 7 of 10 |
+| llama3.2 (local): after prompt and rule changes, tickets 1-10 | 10 of 10 | 10 of 10 |
+| llama3.2 (local): fresh tickets 11-30 | 19 of 20 | 18 of 20 |
+| Gemini flash-lite (hosted): tickets 1-10 | 10 of 10 | 10 of 10 |
+| Gemini flash-lite (hosted): fresh tickets 11-30 | 20 of 20 | 20 of 20 |
+
+With the local model, all 3 mistakes on the fresh tickets were still sent to a human by the safety check. The hosted model name ends in `-latest`, which Google can move to a newer model, so these scores are from November 2026.
+
+**FAQ replies (10 messages I wrote: 7 with an FAQ answer, 3 without)**
+
+| Test | Result |
+|---|---|
+| Right FAQ page chosen (or correctly none) | 9 of 10 |
+| Replies with no invented facts, before the guards (llama3.2) | about 8 of 10 |
+| Replies with no invented facts, after the guards (llama3.2) | 10 of 10 |
+| Replies with no invented facts, after the guards (Gemini) | 10 of 10 |
+
+The one wrong FAQ choice was a safe miss: the ticket got the "a team member will follow up" reply. The FAQ cut-off depends on the search model. Local search uses 0.60. With the hosted search, unrelated messages scored 0.58 to 0.65 and correct matches scored 0.66 to 0.91, so I set it to 0.70 from only 12 messages. I changed the guards after seeing these same messages, so the reply scores are not a fresh test.
+
+## Project structure
+
+```
+ticket_helper/
+├── .github/workflows/tests.yml   runs the tests on every push
+├── src/
+│   ├── classifier.py   AI sorter: category and urgency
+│   ├── rules.py        simple rules that run before the AI
+│   ├── knowledge.py    FAQ search with embeddings
+│   ├── replier.py      grounded reply writer, fixed replies, reply guards
+│   ├── safety.py       decides auto-reply or human review
+│   ├── pipeline.py     one function that runs the whole system
+│   └── database.py     SQLite storage for tickets
+├── data/
+│   ├── tickets.json    30 fake tickets
+│   ├── answer_key.json the correct category and urgency for each ticket
+│   └── faq.json        the company FAQ (made-up facts for the demo)
+├── tests/              tests for the rules, safety check, database, and API
+├── docs/dashboard.png  dashboard screenshot
+├── api.py              FastAPI service
+├── dashboard.py        Streamlit dashboard
+├── main.py             runs the pipeline over the sample tickets
+├── evaluate.py         scores the sorter against the answer key
+├── evaluate_replies.py checks FAQ choice and reply grounding
+├── conftest.py         lets pytest find the src folder
+├── pyproject.toml      packages
+└── uv.lock             exact package versions
+```
+
+## How to run it
+
+1. Install the packages: `uv sync`
+2. Create a file named `.env` in the main folder.
+
+   For free local models, install [Ollama](https://ollama.com), then run `ollama pull llama3.2` and `ollama pull nomic-embed-text`, and put this in `.env`:
+
+   ```
+   LLM_BASE_URL=http://localhost:11434/v1
+   LLM_API_KEY=ollama
+   LLM_MODEL=llama3.2
+   ```
+
+   For a hosted model, use its address, your key, and a model name instead. Also set `EMBED_MODEL` (for example `gemini-embedding-001`) and `FAQ_THRESHOLD` (0.70 worked for Gemini). Never commit `.env`.
+
+3. For local models, start the server in its own terminal: `ollama serve`
+4. In another terminal, run any of these:
+
+   ```
+   uv run uvicorn api:app --reload      # start the REST API
+   uv run streamlit run dashboard.py    # open the dashboard
+   uv run main.py                       # process the sample tickets
+   uv run evaluate.py                   # score the sorter against the answer key
+   uv run evaluate_replies.py           # check the FAQ replies
+   uv run pytest                        # run the tests
+   ```
+
+Setting `DEMO_MODE=true` turns on the public demo mode: limited checks per visit and per day, nothing saved, and no FAQ editing.
+
+If Ollama crashes with a CUDA error on an old graphics driver, run it on the CPU. In PowerShell: `$env:CUDA_VISIBLE_DEVICES="-1"` and then `ollama serve`.
+
+## Design decisions
+
+- **Use as little AI as possible.** Plain rules run first because they are free, instant, and always the same.
+- **Plain code decides what is risky.** The model can be wrong, so a deterministic safety check has the final say.
+- **Fail safe.** When the model service is unavailable, the system asks a person instead of guessing.
+- **Measure before changing.** Prompt changes were tested against an answer key, and fresh tickets were added so the score is not just memorized.
+- **Models are configurable.** A local or hosted model works by changing `.env`. The FAQ cut-off had to be recalibrated when the search model changed.
+
+## Limits and next steps
+
+- The tickets, FAQ, and test messages are fake, and I labeled them myself. The test sets are small.
+- The reply guards are strict, so the model's own wording is often replaced by the plain fact. The replies are safe but plain.
+- FAQ search misses some phrasings. A missed match gives the safe "a team member will follow up" reply.
+- Next: more labeled tickets, several phrasings per FAQ entry, Docker, and a comparison of more models.
