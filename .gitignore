@@ -1,7 +1,21 @@
-.env
-.venv/
+# Python
 __pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Environments and secrets
+.venv
+.env
+
+# Local data and logs
+tickets.db
 tickets.log
 output/
+
+# Tools
 .pytest_cache/
-tickets.db
+*.code-workspace
+.streamlit/secrets.toml
