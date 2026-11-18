@@ -7,6 +7,15 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
+# On Streamlit Cloud, copy the Secrets into environment variables.
+try:
+    for _key in st.secrets:
+        _value = st.secrets[_key]
+        if isinstance(_value, (str, int, float, bool)):
+            os.environ.setdefault(_key, str(_value))
+except Exception:
+    pass  # no secrets file on your laptop, which is fine
+
 from src import database, knowledge
 from src.pipeline import process_ticket
 from src.replier import FAQ_THRESHOLD
